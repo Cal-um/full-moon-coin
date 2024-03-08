@@ -1,0 +1,112 @@
+(mod (
+      MOD_HASH
+      INNER_PUZZLE
+      full_moon_datestamp
+      full_moon_proofs
+      inner_puzzle_solution
+    )
+    (include *standard-cl-23*)
+    (include merkle_utils.clib)
+    (include condition_codes.clib)
+    (include curry.clib)
+
+    (defconstant MERKLE_ROOT 0xe6daf839431066b39982e2b9d26e9d27a522888aec2115fe4e734c4fb3309601)
+    (defconstant TWELVE_HOURS_IN_SECONDS 43200) 
+
+    (defun isFullMoon (leaf proofs)
+      (= MERKLE_ROOT (simplify_merkle_proof leaf proofs))
+    )
+
+    (defun reduce (fun acc lst)
+      (if lst
+          (reduce fun (a fun (list acc (f lst))) (r lst))
+          acc
+      )
+    )
+
+    (defun map (fun l)
+      (if l
+        (c (a fun (list (f l))) (map fun (r l)))
+        ()
+      )
+    )
+
+    (defun-inline new_SSC (stripped_conditions after_condition before_condition) (list stripped_conditions after_condition before_condition))
+    (defun-inline get_SSC_stripped_conditions ((@ n (stripped_conditions after_condition before_condition))) stripped_conditions)
+    (defun-inline get_SSC_after_condition ((@ n (stripped_conditions after_condition before_condition))) after_condition)
+    (defun-inline get_SSC_before_condition ((@ n (stripped_conditions after_condition before_condition))) before_condition)
+
+    (defun strip_seconds_condition_reducer (acc (@ condition (code . rest)))
+      (if (= code ASSERT_SECONDS_ABSOLUTE)
+        (new_SSC (get_SSC_stripped_conditions acc) condition (get_SSC_before_condition acc))
+        (if (= code ASSERT_BEFORE_SECONDS_ABSOLUTE)
+          (new_SSC (get_SSC_stripped_conditions acc) (get_SSC_after_condition acc) condition)
+          (new_SSC (c condition (get_SSC_stripped_conditions acc)) (get_SSC_after_condition acc) (get_SSC_before_condition acc))
+        )
+      )
+    )
+
+    (defun process_after_condition ((@ old_after_condition (code timestamp)) after_timestamp)
+      (if old_after_condition
+        (if (any (= timestamp after_timestamp) (> timestamp after_timestamp))
+          old_after_condition
+          (x)
+        )
+      (list ASSERT_SECONDS_ABSOLUTE after_timestamp)
+      )
+    )
+
+    (defun process_before_condition ((@ old_before_condition (code timestamp)) before_timestamp)
+      (if old_before_condition
+        (if (any (= timestamp before_timestamp) (not (> timestamp before_timestamp)))
+          old_before_condition
+          (x)
+        )
+      (list ASSERT_BEFORE_SECONDS_ABSOLUTE before_timestamp)
+      )
+    )
+
+    (defun process_moon_conditions (inner_conditions after_timestamp before_timestamp)
+      (assign 
+        (stipped_cond after_cond before_cond) (reduce strip_seconds_condition_reducer (new_SSC () () ()) inner_conditions)
+        new_after_conditon (process_after_condition after_cond after_timestamp)
+        new_before_condition (process_before_condition before_cond before_timestamp)
+        (c new_before_condition (c new_after_conditon stipped_cond))
+      )
+    )
+
+    (defun-inline moon_puzzle_hash (puzzle_hash mod_hash)
+      (curry_hashes mod_hash (sha256 1 mod_hash) puzzle_hash)
+    )
+
+    (defun morph_create_coin_conditions (conditions mod_hash)
+      (map (lambda ((& mod_hash) (@ condition (code puzzle_hash amount . rest))) 
+              (if (= code CREATE_COIN)
+                (if (not (= amount -113))
+                  (c CREATE_COIN (c (moon_puzzle_hash puzzle_hash mod_hash) (r (r condition))))
+                  condition
+                )
+                condition
+              )
+           )
+           conditions
+      )
+    )
+    
+    (if (isFullMoon 
+          full_moon_datestamp
+          full_moon_proofs
+        )
+      (assign 
+        full_moon_start (- full_moon_datestamp TWELVE_HOURS_IN_SECONDS)
+        full_moon_end (+ full_moon_datestamp TWELVE_HOURS_IN_SECONDS)
+        inner_conditions (a INNER_PUZZLE inner_puzzle_solution)
+        conditions_with_full_moonstamps (process_moon_conditions inner_conditions full_moon_start full_moon_end)
+        (morph_create_coin_conditions conditions_with_full_moonstamps MOD_HASH)
+      )
+      (x "N0t F00L M00N!") 
+    )
+)
+
+; run output - why so many lists of the same numbers?
+; (2 (1 2 (3 (2 36 (4 2 (4 23 (4 47 ())))) (1 2 46 (4 2 (4 3 (4 (2 11 95) (4 (16 23 (1 . 43200)) (4 (17 23 (1 . 43200)) ())))))) (1 8 (1 . 1585866840163735062677022542155297))) 1) (4 (1 ((((2 (3 27 (1 2 32 (4 2 (4 (2 (3 (24 (1 . 1) 19) (1 11 (1 . 2) 43 5) (1 11 (1 . 2) 5 43)) 1) (4 (4 (23 19 (1 . -1)) 59) ())))) (1 . 5)) 1) 11 (1 . 2) (11 (1 . 2) (6 (5 (1 (34356466678672179216206944866734405838331831190171667647615530531663699592602 . -44412188149083219915772186748035909266791016930429887947443501395007119841358) 304478007748100619656921866962858548602608578336977657321365468506112501625378 . 307950603442897334678328504574242590680972872986240025790519347309360339347397))) 5) (11 (1 . 2) 11 (5 (5 (1 (34356466678672179216206944866734405838331831190171667647615530531663699592602 . -44412188149083219915772186748035909266791016930429887947443501395007119841358) 304478007748100619656921866962858548602608578336977657321365468506112501625378 . 307950603442897334678328504574242590680972872986240025790519347309360339347397))))) (2 (3 5 (1 11 (6 (6 (1 (34356466678672179216206944866734405838331831190171667647615530531663699592602 . -44412188149083219915772186748035909266791016930429887947443501395007119841358) 304478007748100619656921866962858548602608578336977657321365468506112501625378 . 307950603442897334678328504574242590680972872986240025790519347309360339347397))) (2 48 (4 2 (4 9 (4 (2 40 (4 2 (4 13 ()))) ()))))) (1 6 (5 (1 (34356466678672179216206944866734405838331831190171667647615530531663699592602 . -44412188149083219915772186748035909266791016930429887947443501395007119841358) 304478007748100619656921866962858548602608578336977657321365468506112501625378 . 307950603442897334678328504574242590680972872986240025790519347309360339347397)))) 1) 11 (5 (6 (1 (34356466678672179216206944866734405838331831190171667647615530531663699592602 . -44412188149083219915772186748035909266791016930429887947443501395007119841358) 304478007748100619656921866962858548602608578336977657321365468506112501625378 . 307950603442897334678328504574242590680972872986240025790519347309360339347397))) (2 48 (4 2 (4 5 (4 (2 40 (4 2 (4 7 ()))) ()))))) ((9 (1 . -11373248226169603631383090371628996575054390391746502574117694272951232195071) (2 32 (4 2 (4 (11 (1 . 1) 5) (4 11 ()))))) 2 (3 23 (1 2 52 (4 2 (4 5 (4 (2 5 (4 11 (4 39 ()))) (4 55 ()))))) (1 . 11)) 1) (2 (3 11 (1 4 (2 5 (4 19 ())) (2 44 (4 2 (4 5 (4 27 ()))))) (1 1)) 1) 2 (3 (9 19 (1 . 81)) (1 4 9 (4 11 (4 45 ()))) (1 2 (3 (9 19 (1 . 85)) (1 4 9 (4 21 (4 11 ()))) (1 4 (4 11 9) (4 21 (4 45 ())))) 1)) 1) (((2 (3 5 (1 2 (3 (33 (9 21 11) (21 21 11)) (1 . 5) (1 8)) 1) (1 4 (1 . 81) (4 11 ()))) 1) 2 (3 5 (1 2 (3 (33 (9 21 11) (32 (21 21 11))) (1 . 5) (1 8)) 1) (1 4 (1 . 85) (4 11 ()))) 1) (2 58 (4 2 (4 3 (4 (2 52 (4 2 (4 (4 (1 . 2) (4 (4 (1 . 1) 60) (4 (4 (1 . 4) (4 (4 (1 . 1) 2) (4 (1 . 1) ()))) ()))) (4 (4 () (4 () (4 () ()))) (4 5 ()))))) ())))) 4 (2 50 (4 2 (4 91 (4 45 ())))) (4 (2 34 (4 2 (4 43 (4 21 ())))) 19)) ((2 44 (4 2 (4 (4 (1 . 2) (4 (4 (1 . 1) (4 (1 . 2) (4 (4 (1 . 1) 54) (4 (4 (1 . 4) (4 (4 (1 . 1) 2) (4 (1 . 1) ()))) ())))) (4 (4 (1 . 4) (4 (4 (1 . 1) (4 11 ())) (4 (1 . 1) ()))) ()))) (4 5 ())))) 2 (3 (9 19 (1 . 51)) (1 2 (3 (9 91 (1 . -113)) (1 . 11) (1 4 (1 . 51) (4 (2 56 (4 2 (4 9 (4 (11 (1 . 1) 9) (4 43 ()))))) 59))) 1) (1 . 11)) 1) (2 62 (4 2 (4 3 (4 (2 42 (4 2 (4 11 (4 47 (4 23 ()))))) ())))) 2 38 (4 2 (4 11 (4 17 ())))) 1))
