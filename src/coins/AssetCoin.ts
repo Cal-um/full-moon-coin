@@ -27,9 +27,9 @@ export class AssetCoin {
 
       const [parentPuzzle, parentArguments] = parentPuzzleUncurried
 
-      if (!parentPuzzle.equals(puzzles.cat))
+      if (!parentPuzzle.equals(puzzles.cat)) {
         throw new Error("Parent puzzle is not asset token.")
-
+      }
       if (parentArguments.length <= 2)
         throw new Error("Invalid parent puzzle reveal.")
 

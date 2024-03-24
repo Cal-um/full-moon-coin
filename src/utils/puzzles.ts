@@ -4,6 +4,7 @@ import Cat from "../../puzzles/cat.clvm.hex.json"
 import DefaultHidden from "../../puzzles/default_hidden.clvm.hex.json"
 import PayToConditions from "../../puzzles/pay_to_conditions.clvm.hex.json"
 import MoonLayer from "../../puzzles/moon_layer.clvm.hex.json"
+import GenesisByIdTail from "../../puzzles/genesis_by_coin_id.clvm.hex.json"
 
 export const puzzles = {
   cat: Program.deserializeHex(Cat.hex),
@@ -11,4 +12,5 @@ export const puzzles = {
   payToConditions: Program.deserializeHex(PayToConditions.hex),
   payToDelegatedOrHidden: Program.deserializeHex(PayToDelegatedOrHidden.hex),
   moonLayer: Program.deserializeHex(MoonLayer.hex),
+  genesisByIdTail: Program.deserializeHex(GenesisByIdTail.hex),
 }

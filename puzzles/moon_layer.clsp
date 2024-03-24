@@ -10,7 +10,7 @@
     (include condition_codes.clib)
     (include curry.clib)
 
-    (defconstant MERKLE_ROOT 0xe6daf839431066b39982e2b9d26e9d27a522888aec2115fe4e734c4fb3309601)
+    (defconstant MERKLE_ROOT 0xa974ac8a49e9b42b577a188bdbe44a46f3220459e0f50358ffcb965929ec7bbb)
     (defconstant TWELVE_HOURS_IN_SECONDS 43200) 
 
     (defun isFullMoon (leaf proofs)

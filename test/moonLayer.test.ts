@@ -1,14 +1,19 @@
-import { encodeInt, hash256, sha256 } from "chia-bls"
+import { encodeInt } from "chia-bls"
 import { Program } from "clvm-lib"
 import { buildMerkleTree } from "../src/utils/merkleTree"
 import fullMoons from "../src/astronomy/fullMoons.json"
 import { puzzles } from "../src/utils/puzzles"
-import { formatHex } from "../src/utils/hex"
+import { formatHex, stripHexPrefix } from "../src/utils/hex"
 import MoonLayer from "../puzzles/moon_layer.clvm.hex.json"
+import { Coin, CoinSpend } from "../globals"
+import { toCoinId } from "../src/utils/hash"
+import { AssetToken } from "../src/puzzles/AssetToken"
+import { getStandardSolution } from "../src/puzzles/standardTransaction"
+import { parseOutput } from "../src/utils/parsePuzzleOutput"
 
 describe("moonLayer", () => {
   test("We get output if its a full moon date", () => {
-    const sol = getFullMoonSolution(fullMoons[200].timestamp, fullMoons)
+    const sol = getFullMoonSolution(fullMoons[200], fullMoons)
 
     const result = moonLayerPuzz().run(sol)
     expect(result.value.isNull).toBe(false)
@@ -18,7 +23,7 @@ describe("moonLayer", () => {
     const sol = getFullMoonSolution(
       23455432212, // not a full moon date
       fullMoons,
-      fullMoons[200].timestamp
+      fullMoons[200]
     )
 
     expect(() => moonLayerPuzz().run(sol)).toThrow(
@@ -29,24 +34,7 @@ describe("moonLayer", () => {
   test("We will fail on a non moon merkle tree", () => {
     const sol = getFullMoonSolution(
       2071098049, // not a full moon date
-      [
-        {
-          date: "2035-07-20T10:37:25.223Z",
-          timestamp: 2068540645,
-        },
-        {
-          date: "2035-08-19T01:00:49.029Z",
-          timestamp: 2071098049,
-        },
-        {
-          date: "2035-09-17T14:24:02.011Z",
-          timestamp: 2073651842,
-        },
-        {
-          date: "2035-10-17T02:36:01.116Z",
-          timestamp: 2076201361,
-        },
-      ]
+      [2068540645, 2071098049, 2073651842, 2076201361]
     )
 
     expect(() => moonLayerPuzz().run(sol)).toThrow(
@@ -59,7 +47,7 @@ describe("moonLayer", () => {
 
     describe("for condition code 81 (ASSERT_SECONDS_ABSOLUTE)", () => {
       test("when no inner conditions we expect it to be 12 hours before timestamp", () => {
-        const timestamp = 1708777870
+        const timestamp = fullMoons[200]
         const sol = getFullMoonSolution(timestamp, fullMoons)
 
         const result = moonLayerPuzz().run(sol)
@@ -72,7 +60,7 @@ describe("moonLayer", () => {
 
       describe("inner condition contains 81", () => {
         test("time is before the min timestamp then fail", () => {
-          const timestamp = 1708777870
+          const timestamp = fullMoons[200]
           const sol = getFullMoonSolution(timestamp, fullMoons)
 
           const innerPuzzConditions = Program.fromList([
@@ -87,7 +75,7 @@ describe("moonLayer", () => {
         })
 
         test("time is after the min timestamp then use it", () => {
-          const timestamp = 1708777870
+          const timestamp = fullMoons[200]
           const sol = getFullMoonSolution(timestamp, fullMoons)
 
           const innerTimestamp = timestamp - twelveHoursInSeconds + 100
@@ -106,7 +94,7 @@ describe("moonLayer", () => {
         })
 
         test("multiple inner condition 81 use the last", () => {
-          const timestamp = 1708777870
+          const timestamp = fullMoons[200]
           const sol = getFullMoonSolution(timestamp, fullMoons)
 
           const innerTimestamp = timestamp - twelveHoursInSeconds + 100999
@@ -136,7 +124,7 @@ describe("moonLayer", () => {
 
     describe("for condition code 85 (ASSERT_SECONDS_BEFORE_ABSOLUTE)", () => {
       test("when no inner conditions we expect it to be 12 hours after timestamp", () => {
-        const timestamp = 1708777870
+        const timestamp = fullMoons[200]
         const sol = getFullMoonSolution(timestamp, fullMoons)
 
         const result = moonLayerPuzz().run(sol)
@@ -149,7 +137,7 @@ describe("moonLayer", () => {
 
       describe("inner condition contains 85", () => {
         test("time is after the max timestamp then fail", () => {
-          const timestamp = 1708777870
+          const timestamp = fullMoons[10]
           const sol = getFullMoonSolution(timestamp, fullMoons)
 
           const innerPuzzConditions = Program.fromList([
@@ -164,7 +152,7 @@ describe("moonLayer", () => {
         })
 
         test("time is before the max timestamp then use it", () => {
-          const timestamp = 1708777870
+          const timestamp = fullMoons[10]
           const sol = getFullMoonSolution(timestamp, fullMoons)
 
           const innerTimestamp = timestamp + twelveHoursInSeconds - 100
@@ -183,7 +171,7 @@ describe("moonLayer", () => {
         })
 
         test("multiple inner condition 85 use the last", () => {
-          const timestamp = 1708777870
+          const timestamp = fullMoons[10]
           const sol = getFullMoonSolution(timestamp, fullMoons)
 
           const innerTimestamp = timestamp + twelveHoursInSeconds - 100999
@@ -237,7 +225,7 @@ describe("moonLayer", () => {
         ]),
       ])
       beforeAll(() => {
-        const sol = getFullMoonSolution(fullMoons[200].timestamp, fullMoons)
+        const sol = getFullMoonSolution(fullMoons[200], fullMoons)
         output = parseOutput(
           moonLayerPuzz(innerPuzzConditions).run(sol).value.toString()
         )
@@ -295,7 +283,7 @@ describe("moonLayer", () => {
       let output: string[][]
       let condition51s: string[][]
       beforeAll(() => {
-        const sol = getFullMoonSolution(fullMoons[200].timestamp, fullMoons)
+        const sol = getFullMoonSolution(fullMoons[200], fullMoons)
         output = parseOutput(
           moonLayerPuzz(innerPuzzConditions).run(sol).value.toString()
         )
@@ -363,7 +351,7 @@ describe("cost", () => {
     const generalSolutionHex =
       "ff8500841e06caffff82009effa04f484ec0c4c4b1581d10f0f3d8c65ab867f9100f625a512cf1fd8d97145c42cfffa0497aa54e02e7a7c1832cec1b86053c6602baf83a5417361239ad4b99070b363effa06d57aa49a3d888243e91c9a66faeae0bf3a53ef839e94feed003a74ae6ff6ed3ffa0f5b15a31f70778e6019c172e56dc371d2979fa04cc470faf7e411a6047873a8affa08648a3c47ac220598707cd6b45554684f301a93a351d379836b6cec0df42de8bffa0442a54c0c467feacbbcae65dd15a91aa56daa2480a3f6f98e248afd62f795f57ffa09c87021b6257d6723d5dc3869f43d0065e5d5414f65e2e914858bb591172a474ffa05a8d20dba183c3ba7b2ce90fea1e0e7977396b9ad22a70e6e17773e2c9c58331ffa05d1a49a8f69d2d665e1efb1a15fc306eaed18d4846b8cea09d4d7904945559d480ff8080"
     const moonLayerHex = MoonLayer.hex
-    const sol = getFullMoonSolution(fullMoons[200].timestamp, fullMoons)
+    const sol = getFullMoonSolution(fullMoons[200], fullMoons)
     const runCost = moonLayerPuzz(innerPuzzConditions).run(sol).cost
     const oneCreateCoinConditionCost = 1800000
     const costPerByte = 12000
@@ -395,16 +383,76 @@ describe("cost", () => {
   })
 })
 
+describe("issue moon cat", () => {
+  const parentCoin: Coin = {
+    amount: 100000,
+    parent_coin_info:
+      "0x24c36ade721050ca4f0380dabf40e68e2a8a7dd79523703cdfb38a7ab72641d3",
+    puzzle_hash:
+      "0x75da6b5fc6a02eafcfbd5c8248f35d30dd683c67565a6a93cf8599acd4ddf31b",
+  }
+  const puzzle_reveal =
+    "ff02ffff01ff02ffff01ff02ffff03ff0bffff01ff02ffff03ffff09ff05ffff1dff0bffff1effff0bff0bffff02ff06ffff04ff02ffff04ff17ff8080808080808080ffff01ff02ff17ff2f80ffff01ff088080ff0180ffff01ff04ffff04ff04ffff04ff05ffff04ffff02ff06ffff04ff02ffff04ff17ff80808080ff80808080ffff02ff17ff2f808080ff0180ffff04ffff01ff32ff02ffff03ffff07ff0580ffff01ff0bffff0102ffff02ff06ffff04ff02ffff04ff09ff80808080ffff02ff06ffff04ff02ffff04ff0dff8080808080ffff01ff0bffff0101ff058080ff0180ff018080ffff04ffff01b08cd92dc5b3056f0b7dd54092593c1926e9188c894b3cf7b4109ae37d2d2023db88fe40158bdf8f1da0b87270cdcefcfdff018080"
+  const tail = puzzles.genesisByIdTail.curry([
+    Program.fromBytes(toCoinId(parentCoin)),
+  ])
+  console.log("assetId", tail.hashHex())
+  const evepuzzlehash = AssetToken.calculatePuzzle(
+    tail,
+    Program.nil,
+    Program.fromHex(stripHexPrefix(parentCoin.puzzle_hash)).toBytes(),
+    parentCoin.amount
+  ).hash()
+  const coinSpend: CoinSpend = {
+    coin: parentCoin,
+    puzzle_reveal: puzzle_reveal,
+    solution: getStandardSolution([
+      Program.fromList([
+        Program.fromInt(51),
+        Program.fromBytes(evepuzzlehash),
+        Program.fromInt(parentCoin.amount),
+      ]),
+    ]).serializeHex(),
+  }
+  console.log(
+    "solutionHex",
+    getStandardSolution([
+      Program.fromList([
+        Program.fromInt(51),
+        Program.fromBytes(evepuzzlehash),
+        Program.fromInt(parentCoin.amount),
+      ]),
+    ]).serializeHex()
+  )
+
+  const issueCat = AssetToken.issue(
+    coinSpend,
+    tail,
+    Program.nil,
+    Program.fromHex(stripHexPrefix(coinSpend.coin.puzzle_hash)).toBytes(),
+    parentCoin.amount
+  )
+  const sol = Program.deserializeHex(issueCat.puzzle_reveal).run(
+    Program.deserializeHex(issueCat.solution)
+  )
+  console.log(sol.value.toString())
+  const coinspendSol = Program.deserializeHex(coinSpend.puzzle_reveal).run(
+    Program.deserializeHex(coinSpend.solution)
+  )
+  console.log(coinspendSol.value.toString())
+
+  console.log()
+})
+
 const getFullMoonSolution = (
   fullMoonDate: number,
   moons: any[],
   dateForProofs?: number,
   innerSolution: Program = Program.nil
 ) => {
-  const [_, proofs] = buildMerkleTree(
-    moons.map((x: any) => encodeInt(x.timestamp))
-  )
+  const [_, proofs] = buildMerkleTree(moons.map((x: any) => encodeInt(x)))
   const [bitNumber, hashes] = proofs[dateForProofs ?? fullMoonDate]
+  console.log(bitNumber, hashes)
 
   return Program.fromList([
     Program.fromInt(fullMoonDate),
@@ -424,44 +472,4 @@ const moonLayerPuzz = (innerPuzzConditions: Program = Program.fromList([])) => {
     Program.fromBytes(puzzles.moonLayer.hash()),
     innerPuzz,
   ])
-}
-
-const parseOutput = (input: string): string[][] => {
-  // Helper function to recursively parse the string
-  function parseHelper(chars: string[], currentArray: any[] = []): any[] {
-    let currentElement = ""
-
-    while (chars.length > 0) {
-      const char = chars.shift() // Remove the first character
-
-      if (char === "(") {
-        // When an open parenthesis is found, start a new array and parse it recursively
-        currentArray.push(parseHelper(chars))
-      } else if (char === ")") {
-        // When a close parenthesis is found, return the current array
-        if (currentElement) {
-          currentArray.push(currentElement)
-          currentElement = ""
-        }
-        return currentArray
-      } else if (char !== " ") {
-        // Accumulate the characters for the current element
-        currentElement += char
-      } else if (currentElement) {
-        // If there's a space and we have an accumulated element, push it to the current array
-        currentArray.push(currentElement)
-        currentElement = ""
-      }
-    }
-
-    // After processing all characters, if there's any remaining element, add it to the current array
-    if (currentElement) {
-      currentArray.push(currentElement)
-    }
-
-    return currentArray
-  }
-
-  // Convert the input string to an array of characters and initiate parsing
-  return parseHelper(input.split("")).flat()
 }
