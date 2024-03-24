@@ -12,7 +12,7 @@
       "backgroundColor": "#ffffff"
     },
     "experiments": {
-      "baseUrl": "full-moon-coin"
+      "baseUrl": "/full-moon-coin"
     },
     "assetBundlePatterns": ["**/*"],
     "ios": {
