@@ -65,7 +65,7 @@ export const MoonView = () => {
         style={{ height: 65 - 16, width: 65 - 16 }}
       />
       <Text style={{ marginLeft: 16, fontSize: 32, color: "white" }}>
-        {10000 + " FLM"}
+        {flmBalance + " FLM"}
       </Text>
     </View>
   )
